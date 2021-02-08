@@ -1,82 +1,64 @@
 package Chess;
 
-public class Piece {
-	
-	public static final int PAWN = 1;
-	public static final int KNIGHT = 2;
-	public static final int BISHOP = 3;
-	public static final int ROOK = 4;
-	public static final int QUEEN = 5;
-	public static final int KING = 6;
-	
-	private boolean team; // true means white, false means black
-	private int pieceType;
-	
-	private int id;
-	
-	public Piece(String name, boolean team) {
-		this.team = team;
-		
-		if (name.equals("Pawn")) {
-			pieceType = PAWN;
-		} else if (name.equals("Knight")) {
-			pieceType = KNIGHT;
-		} else if (name.equals("Bishop")) {
-			pieceType = BISHOP;
-		} else if (name.equals("Rook")) {
-			pieceType = ROOK;
-		} else if (name.equals("Queen")) {
-			pieceType = QUEEN;
-		} else if (name.equals("King")) {
-			pieceType = KING;
-		}
-		
-		setId();
-	}
-	
-	public Piece(Piece p) {
-		pieceType = p.pieceType;
-		team = p.team;
-		
-		setId();
-	}
-	
-	private void setId() {
-		id = 13; // not an arbitrary number, do not change. Check hashifier.java for reason behind this
-		id += (pieceType - 1) * 64; // 8x8 for board size = 64
-		if (team) {
-			id += 0;
-		}
-		else {
-			id += 384; // 6x64
-		}
-	}
-	
-	public int getId() {
-		return id;
-	}
-	
-	public String toString() {
-		String retString = team ? "w" : "b";
-		
-		switch(pieceType) {
-			case PAWN: retString += "P"; break;
-			case KNIGHT: retString += "N"; break;
-			case BISHOP: retString += "B"; break;
-			case ROOK: retString += "R"; break;
-			case QUEEN: retString += "Q"; break;
-			case KING: retString += "K"; break;
-		}
-		return retString;
-	}
-	
-	public boolean getTeam() {
-		return team;
-	}
-	
-	public int getType() {
-		return pieceType;
-	}
-	
+import java.util.LinkedList;
 
+public abstract class Piece {
+	protected byte row; // the row and col values refer to the piece's current location
+	protected byte col;
+	protected boolean team; // white is true, black is false
+	protected PieceID id;
+	protected boolean[][] dependentOnSquare; // a piece is dependent on a square if any change to that square would mean that this piece's possible moves would change
+	protected LinkedList<Move> possibleMoves;
+	protected boolean isAlive; // true at the start, false if captured
+	
+	protected boolean startDependent;
+	protected boolean endDependent;
+	protected boolean captureDependent;
+	
+	
+	public abstract Piece genMoves(ChessBoard board, Move latestMove); // returns "this" if not a promotion, returns the new promoted piece otherwise
+	
+	public abstract Piece copy();
+	
+	protected void copyInfoInto(Piece destination) {
+		destination.dependentOnSquare = new boolean[dependentOnSquare.length][dependentOnSquare[0].length];
+		for (int row = 0; row < dependentOnSquare.length; row++) {
+			for (int col = 0; col < dependentOnSquare[0].length; col++) {
+				destination.dependentOnSquare[row][col] = dependentOnSquare[row][col];
+			}
+		}
+		// this works by means of reference copy because the move objects themselves do not change
+		destination.possibleMoves = new LinkedList<Move>();
+		for (Move m : possibleMoves) {
+			(destination.possibleMoves).add(m);
+		}
+		destination.startDependent = startDependent;
+		destination.endDependent = endDependent;
+		destination.captureDependent = captureDependent;
+		destination.isAlive = isAlive;
+	}
+	
+	protected boolean canMoveTo(ChessBoard board, byte endRow, byte endCol) { // returns the possible move if it can make the move, otherwise returns null
+		if (endRow >= 0 && endRow < board.numRows && endCol >= 0 && endCol < board.numCols) { // checks if the row and column numbers are inside the board
+			dependentOnSquare[endRow][endCol] = true;
+			PieceID checkPiece = board.boardPieces[endRow][endCol];
+			
+			if (checkPiece == null)  { // true if the ending square is empty
+				possibleMoves.add(new Move(row, col, endRow, endCol, id, false, (byte)-1, (byte)-1, null, false));
+			} else if (board.boardTeams[endRow][endCol] != team) { // true if the ending square has a piece belonging to the opposite team (meaning this move is a capture)
+				possibleMoves.add(new Move(row, col, endRow, endCol, id, true, endRow, endCol, checkPiece, false));
+			}
+
+			return true;
+		} else {
+			return false;
+		}
+	}
+	
+	public boolean dependentOnMove(Move m) {
+		startDependent = dependentOnSquare[m.startRow][m.startCol];
+		endDependent = dependentOnSquare[m.endRow][m.endCol];
+		captureDependent = m.isCapture && dependentOnSquare[m.captureRow][m.captureCol];
+		return (startDependent || endDependent || captureDependent);
+	}
 }
